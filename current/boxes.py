@@ -49,4 +49,21 @@ print('Number of boxes:', len(labels))
 print('Checksum:', pairs*triples)
 
 # Now I need to find box labels which match in all but 1 position.
-# Almost-matching boxes will have to match on 1..x OR 2..end
+# Loop through the length of the labels (they are all the same len).
+# Create an empty dict.
+# Slice out 1 character position from all the labels, store the sliced labels in the dict.
+# If the key exists, we've found the nearly-identical labels.
+near_match = None
+# The label_len includes the trailing newline, so only go to len-1
+for s in range(label_len - 1):
+    sliced = {}
+    for l in labels:
+        # Slice out the character at [s] (and also the trailing newline).
+        sliced_label = l.box_label[0:s] + l.box_label[s+1:label_len-1]
+        # print(sliced_label)
+        if sliced_label in sliced:
+            near_match = sliced_label
+            # Should only be one near match, but got through all possibilities.
+            print('Found match:', near_match)
+        else:
+            sliced[sliced_label] = True
