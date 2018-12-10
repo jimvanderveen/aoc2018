@@ -1,60 +1,144 @@
 #!/usr/bin/env python
 
-import pprint
+from pprint import pprint
+from pprint import pformat
 import string
+import sys
+
+debug = False
 
 infile = 'tasks.list'
 #infile = 'tasks.test'
 
-task = {}
+class Worker:
+    # is_idle (boolean function)
+    # current task (or None, if idle)
+    # [SORT KEY] finish_time (or sys.maxsize, if idle)
+    # name (mostly for debugging, and fun)
+    def __init__(self, name):
+        self.name = name
+        self.task = None
+        self.finish_time = sys.maxsize
+
+    def __lt__(self, other):
+        return self.finish_time < other.finish_time
+
+    def is_idle(self):
+        return self.task is None
+
+    def __repr__(self):
+        # repr seems to be used for pprint()?
+        if self.task is None:
+            return "%s idle" % self.name
+        else:
+            return "%s on %s done %d" % (self.name, self.task, self.finish_time)
+
+    def __str__(self):
+        # str seems to be used for print()?
+        return "%s(%r)" % (self.__class__, self.__dict__)
+
+    def start(self, task, now):
+        # Assign task to this worker.
+        # Pass in the task label and the current time.
+        # Return this worker's finish time.
+        self.task = task
+        self.finish_time = now + 61 + ord(task) - ord('A')
+        return self.finish_time
+
+    def finished(self):
+        # Set this worker to idle.
+        self.task = None
+        self.finish_time = sys.maxsize
+
+# Record all tasks' antecedents. Key: successor; value: set of antecedents.
+antecedents = {}
+
+all_tasks = set()
 
 with open(infile, 'r') as f:
     for inst in f:
         words = inst.split()
         antecedent = words[1]
         successor = words[7]
-        if successor in task:
-            task[successor].add(antecedent)
+        # Add both antecedent and successor to set of all_tasks
+        all_tasks |= set(antecedent)
+        all_tasks |= set(successor)
+        # Record the dependency by adding to or creating the set of antecedents
+        if successor in antecedents:
+            antecedents[successor].add(antecedent)
         else:
-            task[successor] = set(antecedent)
+            antecedents[successor] = set(antecedent)
+if debug:
+    #pprint(all_tasks)
+    print(sorted(all_tasks))
+    print('Number of tasks:',len(all_tasks))
+if True:
+    print('Tasks with antecedents')
+    for t in sorted(antecedents):
+        print(t, pformat(antecedents[t]))
 
-for t in sorted(task):
-    print(t, pprint.pformat(task[t]))
+workers = [Worker('elf1'), Worker('elf2'), Worker('elf3'), Worker('elf4'), Worker('I/me')]
 
-all_tasks = set()
-for t in task:
-    all_tasks |= task[t]
-print(pprint.pformat(all_tasks))
+current_time = 0
+
+# We'll use min() to find next_event, so start with a number larger than any
+# we're likely to see.
+next_event = sys.maxsize
 
 ordered_tasks = []
 while all_tasks:
+    # Which tasks are available now?
     available_tasks = []
-    for t in all_tasks:
-        if t not in task or len(task[t]) == 0:
+    for t in sorted(all_tasks):
+        if t not in antecedents or len(antecedents[t]) == 0:
             # Task T has no antecedents, it's available.
             available_tasks += t
-            
-    next_task = sorted(available_tasks)[0]
-    print('Next task(s):', pprint.pformat(sorted(available_tasks)))
-    ordered_tasks += next_task
-    all_tasks.remove(next_task)
-    ### print(pprint.pformat(all_tasks))
-    # for t in all_tasks:
-    for t in task:
-        task[t] -= set(next_task)
-        #if len(task[t]) == 0:
-        #    del task[t]
-#        if next_task in task[t]:
-#            print('removing:', next_task, 'from:', t)
-#            task[t].remove(next_task)
-#        else:
-#            print('task:', t, 'missing:', next_task)
-    #for t in sorted(task):
-    #    print(t, pprint.pformat(task[t]))
+    if debug:
+        print('Next task(s):', pformat(available_tasks))
 
-### print('There should be one remaining task:', pprint.pformat(task))
-for t in task:
-    if t not in ordered_tasks:
-        print('Final task:', t)
+    # Which workers are idle?
+    idle_workers = [w for w in workers if w.is_idle()]
+    if debug:
+        print('Idle worker(s):', idle_workers)
+
+    # Assign available tasks to idle workers.
+    while available_tasks and idle_workers:
+        w = idle_workers.pop(0)
+        t = available_tasks.pop(0)
         ordered_tasks += t
+        if debug:
+            pprint(ordered_tasks)
+        f = w.start(t, current_time)
+        all_tasks.remove(t)
+        if debug:
+            print(w)
+            print('finish time:', f)
+
+    # When will the next thing happen? Advance the clock to the earliest task
+    # completion time, and figure out what's been done.
+    if True:
+    #if debug:
+        print('Workers\' status:',workers)
+    # Idle workers have ~infinite finish_time. I think it's possible for
+    # multiple tasks to complete at the same time.
+    next_worker = min(workers)
+    if True:
+    #if debug:
+        print('Next event:', next_worker)
+    if debug:
+        pprint(all_tasks)
+
+    for t in antecedents:
+        antecedents[t] -= set(next_worker.task)
+    if debug:
+        for t in sorted(antecedents):
+            print(t, pformat(antecedents[t]))
+
+    print('Worker:',next_worker.name,'finished:', next_worker.task)
+    current_time = next_worker.finish_time
+    next_worker.finished()
+    print('Workers\' status:',workers)
+    if True:
+        print('Time:',current_time)
+
 print(ordered_tasks)
